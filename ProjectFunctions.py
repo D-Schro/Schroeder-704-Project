@@ -620,7 +620,7 @@ def sg_interaction(length, jij):
     x = Q.sigmax()
 
 # create hamiltonian
-    Hint = 0
+    Hintpos = 0
     
     combinations = []
 # Generate all possible pairs of positions
@@ -646,7 +646,8 @@ def sg_interaction(length, jij):
         
 # multiply by jij
         #print(j)
-        Hint += j * term
+        Hintpos += j * term
+        Hint = -Hintpos
         Hintdiag = Hint.diag()
         
     return Hint, Hintdiag
