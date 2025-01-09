@@ -481,7 +481,22 @@ def simplified_groundstate(length, states):
         
     return statevecs
 
-
+def find_degeneracy(length, Hintdiag):
+    minval = min(Hintdiag)
+    minenergy = minval.real
+    #degeneracy = Hintdiag.count(minenergy)
+    degeneracy = np.count_nonzero(Hintdiag == minenergy)
+    groundpos = []
+    for index, value in enumerate(Hintdiag):
+        if np.abs(value - minenergy) < 10**(-12):
+            #print(np.abs(value - minenergy))
+            groundpos.append(index)
+            
+    states = []
+    for index in groundpos:
+        states.append(bin(index)[2:].zfill(length))
+            
+    return Hintdiag, minenergy, degeneracy, groundpos, states
 
 
 def groundstate_prob(length, jij, hlist):
@@ -491,9 +506,9 @@ def groundstate_prob(length, jij, hlist):
     probs3 = []
     probs4 = []
     for h in hlist:
-        H, Hfirst = spin_glass_hamiltonian(length, jij, h)
+        H, Hintdiag = spin_glass_hamiltonian(length, jij, h)
         E, psi = H.groundstate()
-        Hfirstdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hfirst)
+        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         probperground = {}
         for i in range(len(groundpos)):
             pos = groundpos[i]
@@ -508,8 +523,8 @@ def groundstate_prob(length, jij, hlist):
 
 
 
-def hamming_distance(length, Hfirst):
-    Hfirstdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hfirst)
+def hamming_distance(length, Hintdiag):
+    Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
     for i in range(len(groundpos)):
         for j in range(i + 1, len(groundpos)):
             if bin(groundpos[i] ^ groundpos[j]).count('1') < length:
@@ -574,7 +589,7 @@ def spin_glass_hamiltonian(length, jij, h):
 # multiply by jij
         #print(j)
         Hint += j * term
-        Hfirst = Hint.full()
+        Hintdiag = Hint.diag()
         
     #print(terms)
 
@@ -590,7 +605,7 @@ def spin_glass_hamiltonian(length, jij, h):
 
         H = -1 * (Hint + (h*Hfield))
 
-    return H, Hfirst
+    return H, Hintdiag
 
 
 
@@ -632,9 +647,9 @@ def sg_interaction(length, jij):
 # multiply by jij
         #print(j)
         Hint += j * term
-        Hfirst = Hint.full()
+        Hintdiag = Hint.diag()
         
-    return Hint, Hfirst
+    return Hint, Hintdiag
 
 
 
@@ -660,34 +675,14 @@ def sg_field(length):
 
 
 
-def find_degeneracy(length, Hfirst):
-    Hfirstdiag = np.diagonal(Hfirst)
-    minval = min(Hfirstdiag)
-    minenergy = minval.real
-    degeneracy = Hfirstdiag.tolist().count(minenergy)
-    groundpos = []
-    for index, value in enumerate(Hfirstdiag):
-        if np.abs(value - minenergy) < 10**(-12):
-            #print(np.abs(value - minenergy))
-            groundpos.append(index)
-            
-    states = []
-    for index in groundpos:
-        states.append(bin(index)[2:].zfill(length))
-            
-    return Hfirstdiag, minenergy, degeneracy, groundpos, states
-
-
-
-
 def sort_seeds(length, num_ones, seedlist):
     seeddegeneracy = []
     degeneracylist = []
     seeddict = {}
     for i in seedlist:
         jij = generate_jij(length, num_ones, i)
-        H, Hfirst = spin_glass_hamiltonian(length, jij, 0)
-        Hfirstdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hfirst)
+        H, Hintdiag = spin_glass_hamiltonian(length, jij, 0)
+        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         seeddict.update({i:[minenergy, degeneracy, states]})
     sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k][1], reverse=True)}
 #         degeneracylist.append(degeneracy)
