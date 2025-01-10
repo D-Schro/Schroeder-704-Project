@@ -13,6 +13,7 @@ from decimal import Decimal
 
 
 def save_dict_to_file(dictionary, filename):
+    #This function will save a dictionary as a text file
     with open(filename, 'w') as file:
         for key, value in dictionary.items():
             file.write(f"{key}: {value}\n")
@@ -245,15 +246,7 @@ def mutual_info(length, psi, A, B):
 #psi = groundstate vector from respective model
 #A = A spin
 #B = B spin
-    
-    combinations = []
-    physdist = []
-    # Generate all possible pairs of positions
-    for i in range(length):
-        for j in range(i + 1, length):
-            combinations.append([i, j])
-            physdist.append(j-i)
-               
+
 #create a selection of "everything else" based on given A and B
     C = [item for i, item in enumerate(range(length)) if i not in A and i not in B]
     
@@ -309,7 +302,7 @@ def mutual_info(length, psi, A, B):
 #compute distance proxy from mutual information
     distance = (-np.log(mutualinfo/(2*np.log(2))))
     #distance = (-np.log(mutualinfo))/(2*np.log(2))
-    return combinations, physdist, mutualinfo, distance#, vnentropyA, vnentropyB, vnentropyC
+    return physdist, mutualinfo, distance#, vnentropyA, vnentropyB, vnentropyC
 
 
 
@@ -317,7 +310,7 @@ def mutual_info(length, psi, A, B):
 def correlation_function(length, psi, zvar):
 #length = length of spin chain
 #psi = groundstate from respective model
-#zvar determines if it is the zor x corellation function 0 = z, 1 = x
+#zvar determines if it is the z or x corellation function 0 = z, 1 = x
     if zvar == 0:
         I = Q.qeye(2)
         z = Q.sigmaz()
@@ -446,6 +439,7 @@ def correlation_function_one_pos(length, pos, psi, zvar):
 
 
 def excited_states(eigenenergies, minenergy, degeneracy):
+    #This function will take a list of eienenergies and compare them all to the ground state energy. It returns a number of excited state energies equal to the degeneracy of the system as well as the energy difference to the ground state
     excitedstates = []
     seen_states = set()
     energy_diff = []
@@ -465,6 +459,8 @@ def excited_states(eigenenergies, minenergy, degeneracy):
 
 
 def simplified_groundstate(length, states):
+    #this, given the size of the system and its classical ground states written in binary will turn each binary groundstate into a vector in qutip
+    #it can then be used to create a classical superposition of groundstates for analysis
     statevecs = []
     tensors = ['' for _ in range(length)]
     for state in states:
@@ -482,6 +478,8 @@ def simplified_groundstate(length, states):
     return statevecs
 
 def find_degeneracy(length, Hintdiag):
+    #this function takes the size of the system and the  diagonal of the interaction term of the hamiltonian
+    #it returns the diagonal, its classical ground state energy, degeneracy of the classical ground state, position of each ground state energy in the diagonal, and corresponding classical ground states written in binary
     minval = min(Hintdiag)
     minenergy = minval.real
     #degeneracy = Hintdiag.count(minenergy)
@@ -500,13 +498,21 @@ def find_degeneracy(length, Hintdiag):
 
 
 def groundstate_prob(length, jij, hlist):
+    #This takes the size of the system, the interaction term array, and a list of h values
+    #It will return 
     probsoverh = {}
     probs1 = []
     probs2 = []
     probs3 = []
     probs4 = []
+    probs5 = []
+    probs6 = []
+    probs7 = []
+    probs8 = []
+    Hint, Hintdiag = sg_interaction(length, jij)
+    Hfield = sg_field(length)
     for h in hlist:
-        H, Hintdiag = spin_glass_hamiltonian(length, jij, h)
+        H = Hint + (h * Hfield)
         E, psi = H.groundstate()
         Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         probperground = {}
@@ -518,7 +524,11 @@ def groundstate_prob(length, jij, hlist):
         probs2.append(probperground[states[1]])
         probs3.append(probperground[states[2]])
         probs4.append(probperground[states[3]])
-    return probsoverh, probs1, probs2, probs3, probs4, states
+        probs5.append(probperground[states[4]])
+        probs6.append(probperground[states[5]])
+        probs7.append(probperground[states[6]])
+        probs8.append(probperground[states[7]])
+    return probsoverh, probs1, probs2, probs3, probs4, probs5, probs6, probs7, probs8, states
 
 
 
@@ -574,7 +584,7 @@ def spin_glass_hamiltonian(length, jij, h):
     
     
 # Iterate through each combination
-    Hint = 0
+    Hintpos = 0
     for i, combo in enumerate(combinations):
         #print(i,combo)
         j = jij[i]
@@ -588,22 +598,24 @@ def spin_glass_hamiltonian(length, jij, h):
         
 # multiply by jij
         #print(j)
-        Hint += j * term
+        Hintpos += j * term
+        Hint = -Hintpos
         Hintdiag = Hint.diag()
         
     #print(terms)
 
 # Transverse field term
-    Hfield = 0
+    Hfieldpos = 0
     for v in range(length):
 # Pauli x matrix at each spin in the chain while the rest are identity
         hterm = Q.tensor([I] * v + [x] + [I] * (length - v - 1))
             #print("The transverse field term is:")
             #print(hterm)
-        Hfield += hterm
+        Hfieldpos += hterm
+        Hfield = -Hfieldpos
 #     print("The Hamiltonian is:")
 
-        H = -1 * (Hint + (h*Hfield))
+        H = Hint + (h*Hfield)
 
     return H, Hintdiag
 
@@ -662,14 +674,15 @@ def sg_field(length):
     z = Q.sigmaz()
     x = Q.sigmax()
 
-    Hfield = 0
+    Hfieldpos = 0
 # Transverse field term
     for v in range(length):
 # Pauli x matrix at each spin in the chain while the rest are identity
         hterm = Q.tensor([I] * v + [x] + [I] * (length - v - 1))
             #print("The transverse field term is:")
             #print(hterm)
-        Hfield += hterm
+        Hfieldpos += hterm
+        Hfield = -Hfieldpos
 #     print("The Hamiltonian is:")
 
     return Hfield
@@ -698,16 +711,20 @@ def sort_seeds(length, num_ones, seedlist):
 
 def max_variance_ratio(distancedict, hlist):
     ratiodict = {}
+    stdevdict = {}
+    meandict = {}
     for h in hlist:
         distances = distancedict[h]
         standarddev = np.std(distances)
         mean = np.mean(distances)
         ratio = standarddev / mean
         ratiodict.update({h:ratio})
+        stdevdict.update({h:standarddev})
+        meandict.update({h:mean})
     maxh = max(ratiodict, key=ratiodict.get)
     maxratio = ratiodict[maxh]
     #print('The hval with highest ratio is ' + str (maxh) + ' with ratio ' + str(maxratio))
-    return ratiodict, maxh, maxratio
+    return ratiodict, maxh, maxratio, stdevdict, meandict
 
 
 
