@@ -10,6 +10,8 @@ import random
 import json
 import networkx as nx
 from decimal import Decimal
+import ast
+import scipy.stats as stats
 
 
 def save_dict_to_file(dictionary, filename):
@@ -302,7 +304,7 @@ def mutual_info(length, psi, A, B):
 #compute distance proxy from mutual information
     distance = (-np.log(mutualinfo/(2*np.log(2))))
     #distance = (-np.log(mutualinfo))/(2*np.log(2))
-    return physdist, mutualinfo, distance#, vnentropyA, vnentropyB, vnentropyC
+    return mutualinfo, distance#, vnentropyA, vnentropyB, vnentropyC
 
 
 
@@ -728,4 +730,281 @@ def max_variance_ratio(distancedict, hlist):
 
 
 
+def find_transitions(xaxis, stagmagvals, ratiodict, stdevdict, meandict):
+    
+    covarvals = []
+    for key in ratiodict.keys():
+        covarvals.append(ratiodict[key])
+    
+    stdevvals = []
+    for key in stdevdict.keys():
+        stdevvals.append(stdevdict[key])
+    
+    meanvals = []
+    for key in meandict.keys():
+        meanvals.append(meandict[key])
+    
+    
+    # Calculate numerical derivatives (slope between adjacent points)
+    dx = np.diff(xaxis)
+    dstagmag = np.diff(stagmagvals)
+    slopes1 = dstagmag / dx
 
+    # Find the index of the maximum slope
+    stagmag_slope_index = np.argmax(np.abs(slopes1))
+
+    # Get the x and y values of the point with the maximum slope
+    x_max_slope1 = xaxis[stagmag_slope_index + 1]  # +1 because slopes are between points
+    stagmag_max_slope = stagmagvals[stagmag_slope_index + 1]
+
+    #print(f"Point of maximum slope for staggered magnetization: ({x_max_slope1}, {stagmag_max_slope})")
+    
+    # Calculate numerical derivatives (slope between adjacent points)
+    xaxisnew = xaxis[-59:]
+    
+    dx = np.diff(xaxisnew)
+    dmean = np.diff(meanvals[-59:])
+    slopes2 = dmean / dx
+
+    # Find the index of the maximum slope
+    mean_slope_index = np.argmax(np.abs(slopes2))
+
+    # Get the x and y values of the point with the maximum slope
+    x_max_slope2 = xaxisnew[mean_slope_index + 1]  # +1 because slopes are between points
+    mean_max_slope = meanvals[mean_slope_index + 1]
+
+    #print(f"Point of maximum slope for mean: ({x_max_slope2}, {mean_max_slope})")
+    
+    
+    # Use scipy.signal.find_peaks to find the indices of the peaks
+    peaks1, _ = scipy.signal.find_peaks(stdevvals)
+    #print(peaks)
+
+    # Print the x and y coordinates of the peaks
+    peak_x1 = xaxis[peaks1[0]]
+    peak_stdev = stdevvals[peaks1[0]]
+    #print(peak_x1, peak_stdev)
+    #print(f"Peak for standard deviation: ({peak_x1}, {peak_stdev})")
+    
+    
+    
+    # Use scipy.signal.find_peaks to find the indices of the peaks
+    peaks2, _ = scipy.signal.find_peaks(covarvals)
+    #print(peaks)
+
+    # Print the x and y coordinates of the peaks
+    peak_x2 = xaxis[peaks2[0]]
+    peak_covar = covarvals[peaks2[0]]
+    #print(peak_x1, peak_covar)
+    #print(f"Peak for coefficient of variance: ({peak_x2}, {peak_covar})")
+    
+    return x_max_slope1, peak_x2, x_max_slope2, peak_x1
+
+
+
+def staggered_magnetization(length, states):#, psi):
+    #will calculate the staggered magnetization opertor
+    #only works for degeneracy 2
+    statesigns = []
+    z = Q.sigmaz()
+    I = Q.qeye(2)
+    for spin in states[0]:
+        if spin == '0':
+            sign = 1
+            statesigns.append(sign)
+        elif spin == '1':
+            sign = -1
+            statesigns.append(sign)
+            
+            
+            
+    zterm = 0
+    for i in range(length):
+        # Pauli z matrix at each spin in the chain while the rest are identity
+        term = Q.tensor([I] * i + [z] + [I] * (length - i - 1))
+        #zterm += (staggersign * term)
+        zterm += (statesigns[i] * term)
+    stagmag = (1/length) * zterm
+    #expectvalue = Q.expect((stagmag**2), psi)
+    return stagmag#, expectvalue
+
+
+
+
+
+def save_dict_to_file(dictionary, filename):
+    with open(filename, 'w') as file:
+        for key, value in dictionary.items():
+            file.write(f"{key}: {value}\n")
+            
+            
+def save_dict_to_array_file(dictionary, filename):
+    with open(filename, 'w') as file:
+        for key, value in dictionary.items():
+            line = f"{key} {value}\n"
+            file.write(f"{key} {value}\n")
+        #print(array)
+            
+            
+            
+def generate_sorted_classical_data(length, num_ones, seedlist):
+    seeddict = {}
+    for seed in seedlist:
+        jij = generate_jij(length, num_ones, seed)
+        Hint, Hintdiag = sg_interaction(length, jij)
+        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        seeddict.update({seed:[degeneracy, minenergy, states]})
+    sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k], reverse=True)}
+    return sorted_seeds
+
+
+def read_from_disk(filename):
+    #works for the save dict to array function and will split into an array containing two parts which were separated by the first space in the text file
+    info = []
+    with open(filename, 'r') as file:
+        for line in file:
+            parts = line.split(' ', 1)
+            info.append(parts[0])
+            info.append(ast.literal_eval(parts[1].strip()))
+        return info
+    
+
+def read_array_data(filename):
+# Open and read the file
+    data = []
+    with open(filename, 'r') as file:
+        for line in file:
+            # Remove the newline character and any leading/trailing spaces
+            line = line.strip()
+            
+            # Split the line into the first number and the list part
+            parts = line.split(' ', 1)  # Split into two parts at the first space
+        
+            # The first part is the first number, and the second part is the list
+            first_number = float(parts[0])  # Convert the first number to float
+            list_numbers = eval(parts[1])  # Convert the string representation of the list to an actual list
+        
+            # Combine the first number and the rest of the numbers
+            row = [first_number] + list_numbers
+        
+            # Append the row to the data list
+            data.append(row)
+
+    # Convert the data list to a numpy array
+    array = np.array(data)
+
+    # Print the numpy array
+    return array
+
+
+def read_classical_data(filename):
+    # Create an empty list to store the rows
+    data = []
+
+    # Open and read the file
+    with open(filename, 'r') as file:
+        for line in file:
+            # Remove the newline character and any leading/trailing spaces
+            line = line.strip()
+
+            # Split the line into the first number, the second number, and the binary string list
+            parts = line.split(' ', 1)  # Split into two parts at the first space
+
+            # The first part is the first number, and the second part is the rest (the list part)
+            first_number = parts[0]  # Convert the first number to float
+            second_part = eval(parts[1])  # Use eval to turn the string into an actual list
+
+            # Extract the second number and the list of binary strings
+            second_number = second_part[0]# The second number is the first element in the list
+            third_number = second_part[1]
+            binary_list = second_part[2]  # The list of binary strings
+
+            # Combine the first number, second number, and the binary list
+            row = [first_number, second_number, third_number, binary_list]
+
+            # Append the row to the data list
+            data.append(row)
+
+    # Convert the data list to a numpy array
+    array = np.array(data, dtype=object)
+
+    # Print the numpy array
+    return array
+    
+    
+def generate_psi_data(length, num_ones, seedlist, Hfield, hval):
+    seeddict = {}
+    for seed in seedlist:
+        jij = generate_jij(length, num_ones, seed)
+        Hint, Hintdiag = sg_interaction(length, jij)
+        H = Hint + (hval * Hfield)
+        E, psi = H.groundstate()
+        seeddict.update({seed:psi})
+    return seeddict
+
+
+
+def generate_mutual_information_data(length, num_ones, seedlist, Hfield, hval):
+    seeddict = {}
+    for seed in seedlist:
+        jij = generate_jij(length, num_ones, seed)
+        Hint, Hintdiag = sg_interaction(length, jij)
+        H =  Hint + (hval * Hfield)
+        E, psi = H.groundstate()
+        minfo1 = []
+        for i in range(length):
+            for j in range(i + 1, length):
+                mutualinfo, distance= mutual_info(length, psi, [i], [j])
+                minfo1.append(mutualinfo)
+        seeddict.update({seed:minfo1})
+    return seeddict
+
+
+def generate_transitions_data(length, Hfield, seedlist, hvals):
+#     stagmag_transitions = {}
+#     covar_transitions = {}
+#     mean_transitions = {}
+#     stdev_transitions = {}
+    transitionsdict = {}
+
+
+    for seed in seedlist:
+        stagmaglist = []
+        jij = generate_jij(length, 14, seed)
+        Hint, Hintdiag = sg_interaction(length, jij)
+        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        stagmag = staggered_magnetization(length, states)
+        for h in hvals:
+            H = Hint + (h * Hfield)
+            E, psi = H.groundstate()
+            expectvalue = Q.expect((stagmag**2), psi)
+            stagmaglist.append(expectvalue)
+    
+
+        alldist = {}
+        allminfo = {}
+        # Generate all possible pairs of positions
+        for h in hvals:
+            distancelist = []
+            minfolist = []
+            H = Hint + (h * Hfield)
+            E, psi = H.groundstate()
+            for i in range(length):
+                for j in range(i + 1, length):
+                    minfo, distance = mutual_info(length, psi, [i], [j])
+                    distancelist.append(distance)
+                    minfolist.append(minfo)
+            alldist.update({h:distancelist})
+            #allminfo.update({h:minfolist})
+        #print(alldist)
+        ratiodict, maxh, maxratio, stdevdict, meandict = max_variance_ratio(alldist, hvals)
+
+
+        stagmag_max_slope, peak_covar, mean_max_slope, peak_stdev = find_transitions(hvals, stagmaglist, ratiodict, stdevdict, meandict)
+    
+#         stagmag_transitions.update({seed:stagmag_max_slope})
+#         covar_transitions.update({seed:peak_covar})
+#         mean_transitions.update({seed:mean_max_slope})
+#         stdev_transitions.update({seed:peak_stdev})
+        transitionsdict.update({seed:[stagmag_max_slope, mean_max_slope, peak_covar, peak_stdev]})
+    return transitionsdict
