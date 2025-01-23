@@ -15,9 +15,12 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("-f", type = str, default = 8)
 
+parser.add_argument("-s", type = int, default = 8)
+
 args = parser.parse_args()
 
 filename = args.f
+numseeds = args.s
 
 
 # In[ ]:
@@ -29,6 +32,6 @@ filename = args.f
 # In[ ]:
 
 
-energydict = generate_sorted_classical_data(8, 14, range(100))
+energydict = generate_sorted_classical_data(8, 14, range(numseeds))
 save_dict_to_array_file(energydict, filename)
 
