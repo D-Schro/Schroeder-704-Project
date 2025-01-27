@@ -12,6 +12,8 @@ import networkx as nx
 from decimal import Decimal
 import ast
 import scipy.stats as stats
+import sklearn as skl
+from sklearn.cluster import SpectralClustering
 
 
 def save_dict_to_file(dictionary, filename):
@@ -143,24 +145,6 @@ def svd(a):
     print("the singular value decomposition for the matrix is")
     return u, sigma, v
 
-
-
-def create_bipartition(vec, a_size): #input vector as well as number of spins wanted in a. Remainder will be in partition b
-    length = len(vec)
-    indexlist = list(range(length))
-    
-    random.shuffle(indexlist) #create random list to ensure random selection
-    
-    # Select a subset of the list
-    a_index = indexlist[:a_size]
-    
-    # The remaining b list
-    b_index = indexlist[a_size:]
-
-    print('The index for a spins is')
-    print(a_index)
-    print('The index for b spins is')
-    print(b_index)
 
 
 
@@ -372,14 +356,15 @@ def correlation_function(length, psi, zvar):
     for i in correlationfuncvals:
         distances.append(-np.log(i))
     
-    return combinations, physdist, czz1terms, czz2terms, correlationfuncvals, distances
+    #return combinations, physdist, czz1terms, czz2terms,
+    return correlationfuncvals, distances
 
 
 
 
 def correlation_function_one_pos(length, pos, psi, zvar):
 #length = length of spin chain
-#pos = position in spin change with which to make the possible combinations from
+#pos = position in spin chain with which to make the possible combinations from
 #psi = groundstate from respective model
 #zvar determines if it is the z or x corellation f unction 0 = z, 1 = x
     if zvar == 0:
@@ -437,11 +422,13 @@ def correlation_function_one_pos(length, pos, psi, zvar):
         distances.append(-np.log(np.abs(i)))
         
     
-    return combinations, physdist, czz1terms, czz2terms, correlationfuncvals, distances
+    #return combinations, physdist, czz1terms, czz2terms,
+    return correlationfuncvals, distances
 
 
 def excited_states(eigenenergies, minenergy, degeneracy):
-    #This function will take a list of eienenergies and compare them all to the ground state energy. It returns a number of excited state energies equal to the degeneracy of the system as well as the energy difference to the ground state
+    #This function will take a list of eigenenergies and compare them all to the ground state energy.
+    #It returns a number of excited state energies equal to the degeneracy of the system as well as the energy difference to the ground state
     excitedstates = []
     seen_states = set()
     energy_diff = []
@@ -496,7 +483,7 @@ def find_degeneracy(length, Hintdiag):
     for index in groundpos:
         states.append(bin(index)[2:].zfill(length))
             
-    return Hintdiag, minenergy, degeneracy, groundpos, states
+    return minenergy, degeneracy, groundpos, states
 
 
 def groundstate_prob(length, jij, hlist):
@@ -507,16 +494,16 @@ def groundstate_prob(length, jij, hlist):
     probs2 = []
     probs3 = []
     probs4 = []
-    probs5 = []
-    probs6 = []
-    probs7 = []
-    probs8 = []
+#     probs5 = []
+#     probs6 = []
+#     probs7 = []
+#     probs8 = []
     Hint, Hintdiag = sg_interaction(length, jij)
     Hfield = sg_field(length)
     for h in hlist:
         H = Hint + (h * Hfield)
         E, psi = H.groundstate()
-        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         probperground = {}
         for i in range(len(groundpos)):
             pos = groundpos[i]
@@ -526,17 +513,17 @@ def groundstate_prob(length, jij, hlist):
         probs2.append(probperground[states[1]])
         probs3.append(probperground[states[2]])
         probs4.append(probperground[states[3]])
-        probs5.append(probperground[states[4]])
-        probs6.append(probperground[states[5]])
-        probs7.append(probperground[states[6]])
-        probs8.append(probperground[states[7]])
-    return probsoverh, probs1, probs2, probs3, probs4, probs5, probs6, probs7, probs8, states
+#         probs5.append(probperground[states[4]])
+#         probs6.append(probperground[states[5]])
+#         probs7.append(probperground[states[6]])
+#         probs8.append(probperground[states[7]])
+    return probsoverh, probs1, probs2, probs3, probs4#, probs5, probs6, probs7, probs8, states
 
 
 
 
 def hamming_distance(length, Hintdiag):
-    Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+    minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
     for i in range(len(groundpos)):
         for j in range(i + 1, len(groundpos)):
             if bin(groundpos[i] ^ groundpos[j]).count('1') < length:
@@ -698,7 +685,7 @@ def sort_seeds(length, num_ones, seedlist):
     for i in seedlist:
         jij = generate_jij(length, num_ones, i)
         H, Hintdiag = spin_glass_hamiltonian(length, jij, 0)
-        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         seeddict.update({i:[minenergy, degeneracy, states]})
     sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k][1], reverse=True)}
 #         degeneracylist.append(degeneracy)
@@ -727,7 +714,6 @@ def max_variance_ratio(distancedict, hlist):
     maxratio = ratiodict[maxh]
     #print('The hval with highest ratio is ' + str (maxh) + ' with ratio ' + str(maxratio))
     return ratiodict, maxh, maxratio, stdevdict, meandict
-
 
 
 def find_transitions(xaxis, stagmagvals, ratiodict, stdevdict, meandict):
@@ -760,17 +746,16 @@ def find_transitions(xaxis, stagmagvals, ratiodict, stdevdict, meandict):
     #print(f"Point of maximum slope for staggered magnetization: ({x_max_slope1}, {stagmag_max_slope})")
     
     # Calculate numerical derivatives (slope between adjacent points)
-    xaxisnew = xaxis[-59:]
     
-    dx = np.diff(xaxisnew)
-    dmean = np.diff(meanvals[-59:])
+    dx = np.diff(xaxis)
+    dmean = np.diff(meanvals)
     slopes2 = dmean / dx
 
     # Find the index of the maximum slope
     mean_slope_index = np.argmax(np.abs(slopes2))
 
     # Get the x and y values of the point with the maximum slope
-    x_max_slope2 = xaxisnew[mean_slope_index + 1]  # +1 because slopes are between points
+    x_max_slope2 = xaxis[mean_slope_index + 1]  # +1 because slopes are between points
     mean_max_slope = meanvals[mean_slope_index + 1]
 
     #print(f"Point of maximum slope for mean: ({x_max_slope2}, {mean_max_slope})")
@@ -799,6 +784,78 @@ def find_transitions(xaxis, stagmagvals, ratiodict, stdevdict, meandict):
     #print(f"Peak for coefficient of variance: ({peak_x2}, {peak_covar})")
     
     return x_max_slope1, peak_x2, x_max_slope2, peak_x1
+
+
+
+# def find_transitions_low_h(xaxis, stagmagvals, ratiodict, stdevdict, meandict):
+#     
+#     covarvals = []
+#     for key in ratiodict.keys():
+#         covarvals.append(ratiodict[key])
+#     
+#     stdevvals = []
+#     for key in stdevdict.keys():
+#         stdevvals.append(stdevdict[key])
+#     
+#     meanvals = []
+#     for key in meandict.keys():
+#         meanvals.append(meandict[key])
+#     
+#     
+#     # Calculate numerical derivatives (slope between adjacent points)
+#     dx = np.diff(xaxis)
+#     dstagmag = np.diff(stagmagvals)
+#     slopes1 = dstagmag / dx
+# 
+#     # Find the index of the maximum slope
+#     stagmag_slope_index = np.argmax(np.abs(slopes1))
+# 
+#     # Get the x and y values of the point with the maximum slope
+#     x_max_slope1 = xaxis[stagmag_slope_index + 1]  # +1 because slopes are between points
+#     stagmag_max_slope = stagmagvals[stagmag_slope_index + 1]
+# 
+#     #print(f"Point of maximum slope for staggered magnetization: ({x_max_slope1}, {stagmag_max_slope})")
+#     
+#     # Calculate numerical derivatives (slope between adjacent points)
+#     xaxisnew = xaxis[-59:]
+#     
+#     dx = np.diff(xaxisnew)
+#     dmean = np.diff(meanvals[-59:])
+#     slopes2 = dmean / dx
+# 
+#     # Find the index of the maximum slope
+#     mean_slope_index = np.argmax(np.abs(slopes2))
+# 
+#     # Get the x and y values of the point with the maximum slope
+#     x_max_slope2 = xaxisnew[mean_slope_index + 1]  # +1 because slopes are between points
+#     mean_max_slope = meanvals[mean_slope_index + 1]
+# 
+#     #print(f"Point of maximum slope for mean: ({x_max_slope2}, {mean_max_slope})")
+#     
+#     
+#     # Use scipy.signal.find_peaks to find the indices of the peaks
+#     peaks1, _ = scipy.signal.find_peaks(stdevvals)
+#     #print(peaks)
+# 
+#     # Print the x and y coordinates of the peaks
+#     peak_x1 = xaxis[peaks1[0]]
+#     peak_stdev = stdevvals[peaks1[0]]
+#     #print(peak_x1, peak_stdev)
+#     #print(f"Peak for standard deviation: ({peak_x1}, {peak_stdev})")
+#     
+#     
+#     
+#     # Use scipy.signal.find_peaks to find the indices of the peaks
+#     peaks2, _ = scipy.signal.find_peaks(covarvals)
+#     #print(peaks)
+# 
+#     # Print the x and y coordinates of the peaks
+#     peak_x2 = xaxis[peaks2[0]]
+#     peak_covar = covarvals[peaks2[0]]
+#     #print(peak_x1, peak_covar)
+#     #print(f"Peak for coefficient of variance: ({peak_x2}, {peak_covar})")
+#     
+#     return x_max_slope1, peak_x2, x_max_slope2, peak_x1
 
 
 
@@ -852,7 +909,7 @@ def generate_sorted_classical_data(length, num_ones, seedlist):
     for seed in seedlist:
         jij = generate_jij(length, num_ones, seed)
         Hint, Hintdiag = sg_interaction(length, jij)
-        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         seeddict.update({seed:[degeneracy, minenergy, states]})
     sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k], reverse=True)}
     return sorted_seeds
@@ -972,7 +1029,7 @@ def generate_transitions_data(length, Hfield, seedlist, hvals):
         stagmaglist = []
         jij = generate_jij(length, 14, seed)
         Hint, Hintdiag = sg_interaction(length, jij)
-        Hintdiag, minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+        minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
         stagmag = staggered_magnetization(length, states)
         for h in hvals:
             H = Hint + (h * Hfield)
@@ -1008,3 +1065,168 @@ def generate_transitions_data(length, Hfield, seedlist, hvals):
 #         stdev_transitions.update({seed:peak_stdev})
         transitionsdict.update({seed:[stagmag_max_slope, mean_max_slope, peak_covar, peak_stdev]})
     return transitionsdict
+
+
+def mutual_info_fast(length, psi, a, b):
+#length = length of spin chain
+#psi = groundstate vector from respective model
+#A = A spin
+#B = B spin
+
+    A = [a]
+    B = [b]
+
+#create a selection of "everything else" based on given A and B
+    AB = [a,b]
+    
+#create reduced density matrices for each partition
+    rhoA = Q.ptrace(psi,A)
+    rhoB = Q.ptrace(psi,B)
+    rhoAB = Q.ptrace(psi,AB)
+    
+#compute eigenvalues and entropy for A
+    eigenvalsA = rhoA.eigenenergies()
+    threshold1 = abs(eigenvalsA) < 10**(-8)
+    eigenvalsA[threshold1] = 0
+    #print(eigenvals)
+    eigenvalscleanedA = [num for num in eigenvalsA if num != 0]
+    #print(eigenvalscleaned)
+    vnentropylistA = []
+    for l in eigenvalscleanedA:
+        vnentropylistA.append(-l*np.log(l))
+        #print(vnentropylist)
+        vnentropyA = sum(vnentropylistA)
+    #print(vnentropyA)
+    
+#compute eigenvalues and entropy for B
+    eigenvalsB = rhoB.eigenenergies()
+    threshold1 = abs(eigenvalsB) < 10**(-8)
+    eigenvalsB[threshold1] = 0
+    #print(eigenvals)
+    eigenvalscleanedB = [num for num in eigenvalsB if num != 0]
+    #print(eigenvalscleaned)
+    vnentropylistB = []
+    for l in eigenvalscleanedB:
+        vnentropylistB.append(-l*np.log(l))
+        #print(vnentropylist)
+        vnentropyB = sum(vnentropylistB)
+    #print(vnentropyB)
+    
+#compute eigenvalues and entropy for C
+    eigenvalsAB = rhoAB.eigenenergies()
+    threshold1 = abs(eigenvalsAB) < 10**(-8)
+    eigenvalsAB[threshold1] = 0
+    #print(eigenvals)
+    eigenvalscleanedAB = [num for num in eigenvalsAB if num != 0]
+    #print(eigenvalscleaned)
+    vnentropylistAB = []
+    for l in eigenvalscleanedAB:
+        vnentropylistAB.append(-l*np.log(l))
+        #print(vnentropylist)
+        vnentropyAB = sum(vnentropylistAB)
+    #print(vnentropyC)
+    
+#compute the mutual information based on the previously computed entropy
+    mutualinfo = vnentropyA + vnentropyB - vnentropyAB
+#compute distance proxy from mutual information
+    distance = (-np.log(mutualinfo/(2*np.log(2))))
+    #distance = (-np.log(mutualinfo))/(2*np.log(2))
+    return mutualinfo, distance#, vnentropyA, vnentropyB, vnentropyC
+
+
+def create_affinity_matrix(length, combinations, minfolist):
+    #affmat = np.zeros((length,length))
+    affmat = np.identity(length)
+    for [i, j], minfo in zip(combinations, minfolist):
+        affmat[i,j] = minfo/(2*np.log(2))
+    for [n, m], minfo in zip(combinations, minfolist):
+        affmat[m,n] = minfo/(2*np.log(2))
+    return affmat
+
+
+def affmat_analysis(affmat):
+    #find eigenvalues
+    eigenvals, vecs = scipy.linalg.eig(affmat)
+    realeigenvals = np.real(eigenvals)
+    gaps = []
+    #find the gaps between each adjacent eigenvalue
+    for i in range(1, len(realeigenvals)):
+        gaps.append(abs(realeigenvals[i] - realeigenvals[i-1]))
+        #print(abs(realeigenvals[i] - realeigenvals[i-1]))
+    #find maximum gap
+    max_gap = max(gaps)
+    #convert to number of clusters
+    #Will always be plus 1 to account for eigenvalue in index 0, as eigenvalues are always sorted max to min
+    num_clusters = gaps.index(max_gap) + 1
+    return num_clusters, max_gap
+
+
+def graph_conductance(affmat, clusters):
+    S_spins = []
+    T_spins = []
+    for index, cluster in enumerate(clusters):
+        if cluster == 0:
+            S_spins.append(index)
+        if cluster == 1:
+            T_spins.append(index)
+            
+    inter_cluster_weights = []
+    for i in S_spins:
+        for j in T_spins:
+            inter_cluster_weights.append(affmat[i,j])
+            
+    inter_cluster_sum = sum(inter_cluster_weights)
+    
+    all_s_weights = []
+    combinations = []
+    for l in S_spins:
+        for m in range(len(clusters)):
+            if l != m and [m,l] not in combinations:
+                combinations.append([l,m])
+                #print(l,m)
+                all_s_weights.append(affmat[l,m])
+    all_s_weight_sum = sum(all_s_weights)
+    
+    
+    conductance = inter_cluster_sum / all_s_weight_sum
+    
+        
+    return conductance #, inter_cluster_sum, all_s_weight_sum
+
+
+
+def classical_data_by_line(length, num_ones, seedlist, filename):
+    with open(filename, 'a') as file:
+        for seed in seedlist:
+            jij = generate_jij(length, num_ones, seed)
+            Hint, Hintdiag = sg_interaction(length, jij)
+            minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
+            file.write(f"{seed} {[degeneracy, minenergy, states]}\n")
+            
+            
+            
+def generate_mutual_info_by_line(length, num_ones, seedlist, Hfield, hval, filename):
+    with open(filename, 'a') as file:
+        for seed in seedlist:
+            jij = generate_jij(length, num_ones, seed)
+            Hint, Hintdiag = sg_interaction(length, jij)
+            H =  Hint + (hval * Hfield)
+            E, psi = H.groundstate()
+            minfo = []
+            for i in range(length):
+                for j in range(i + 1, length):
+                    mutualinfo, distance = mutual_info(length, psi, [i], [j])
+                    minfo.append(mutualinfo)
+            file.write(f"{seed} {minfo}\n")
+            
+            
+def read_from_seed_file(filename):
+    seedlist = []
+    with open(filename, 'r') as file:
+        for line in file:
+            seed = line.strip()
+            seedlist.append(int(seed))
+        return seedlist
+    
+    
+
