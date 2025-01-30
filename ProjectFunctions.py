@@ -14,6 +14,7 @@ import ast
 import scipy.stats as stats
 import sklearn as skl
 from sklearn.cluster import SpectralClustering
+from matplotlib.colors import Normalize
 
 
 def save_dict_to_file(dictionary, filename):
@@ -1147,18 +1148,21 @@ def create_affinity_matrix(length, combinations, minfolist):
 def affmat_analysis(affmat):
     #find eigenvalues
     eigenvals, vecs = scipy.linalg.eig(affmat)
-    realeigenvals = np.real(eigenvals)
+    sortedeigs = np.sort(eigenvals)[::-1]
+    realeigenvals = np.real(sortedeigs)
     gaps = []
     #find the gaps between each adjacent eigenvalue
     for i in range(1, len(realeigenvals)):
         gaps.append(abs(realeigenvals[i] - realeigenvals[i-1]))
-        #print(abs(realeigenvals[i] - realeigenvals[i-1]))
-    #find maximum gap
+    #find maximum gap/sort gaps
+    sorted_gaps = sorted(gaps, reverse=True)
     max_gap = max(gaps)
+    second_gap = sorted_gaps[1]
+    third_gap = sorted_gaps[2]
     #convert to number of clusters
     #Will always be plus 1 to account for eigenvalue in index 0, as eigenvalues are always sorted max to min
     num_clusters = gaps.index(max_gap) + 1
-    return num_clusters, max_gap
+    return num_clusters, max_gap, second_gap, third_gap
 
 
 def graph_conductance(affmat, clusters):
@@ -1178,17 +1182,27 @@ def graph_conductance(affmat, clusters):
     inter_cluster_sum = sum(inter_cluster_weights)
     
     all_s_weights = []
-    combinations = []
+    combinations_s = []
     for l in S_spins:
         for m in range(len(clusters)):
-            if l != m and [m,l] not in combinations:
-                combinations.append([l,m])
+            if l != m and [m,l] not in combinations_s:
+                combinations_s.append([l,m])
                 #print(l,m)
                 all_s_weights.append(affmat[l,m])
     all_s_weight_sum = sum(all_s_weights)
     
+    all_t_weights = []
+    combinations_t = []
+    for l in T_spins:
+        for m in range(len(clusters)):
+            if l != m and [m,l] not in combinations_t:
+                combinations_t.append([l,m])
+                #print(l,m)
+                all_t_weights.append(affmat[l,m])
+    all_t_weight_sum = sum(all_t_weights)
     
-    conductance = inter_cluster_sum / all_s_weight_sum
+    
+    conductance = inter_cluster_sum / min([all_s_weight_sum, all_t_weight_sum])
     
         
     return conductance #, inter_cluster_sum, all_s_weight_sum
@@ -1229,4 +1243,65 @@ def read_from_seed_file(filename):
         return seedlist
     
     
+def max_eigenvector_overlap(affmat, clusters):
+    S_spins = []
+    T_spins = []
+    for index, cluster in enumerate(clusters):
+        if cluster == 0:
+            S_spins.append(index)
+        if cluster == 1:
+            T_spins.append(index)
+            
+    eigenvalues, eigenvectors = scipy.linalg.eig(affmat)
+    
+    # Find the index of the largest value in the matrix
+    max_value_index = np.unravel_index(np.argmax(eigenvectors), eigenvectors.shape)
+    # Extract the eigenvector index
+    eigvec_index = max_value_index[1]
+    # Get the eigenvector corresponding to the largest value
+    max_eigvec = eigenvectors[:, eigvec_index]
+    
+    S_over = 0
+    T_over = 0
+    
+    for i in S_spins:
+        S_over += (np.abs(max_eigvec[i]))**2
+    for j in T_spins:
+        T_over += (np.abs(max_eigvec[j]))**2
+    
+    return max_eigvec, S_over, T_over
+    
+def eigenvector_overlap_rearranged(new_affmat, eigenvec_index):
+            
+    eigenvalues, eigenvectors = scipy.linalg.eig(new_affmat)
+
+    eigvec = eigenvectors[:, eigenvec_index]
+    
+    S_over = 0
+    T_over = 0
+    
+    for val1 in [0,1,2,3]:
+        S_over += (np.abs(eigvec[val1]))**2
+    for val2 in [4,5,6,7]:
+        T_over += (np.abs(eigvec[val2]))**2
+    
+    overlaps = [S_over, T_over]
+    
+    return overlaps
+
+def rearrange_affmat(affmat, clusters):
+    S_spins = []
+    T_spins = []
+    for index, cluster in enumerate(clusters):
+        if cluster == 0:
+            S_spins.append(index)
+        if cluster == 1:
+            T_spins.append(index)
+    
+    new_order = S_spins + T_spins
+    
+    # Rearrange the matrix
+    rearranged_affmat = affmat[np.ix_(new_order, new_order)]
+    
+    return new_order, rearranged_affmat
 
