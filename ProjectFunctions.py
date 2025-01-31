@@ -77,6 +77,58 @@ def ising_model_hamiltonian(L, J, g, periodic): # L = length of spin chain, J = 
     return H
 
 
+def varying_range_hamiltonian(length, jdef, alpha, h): 
+# L = length of spin chain,
+#jdef = 0, for infinite range, 1 for long range
+#J = constant for interaction terms, 
+#h = constant applied to field term
+
+# Identity and Pauli matrices for spin 1/2
+    I = Q.qeye(2)
+    z = Q.sigmaz()
+    x = Q.sigmax()
+
+# create hamiltonian
+    H = 0
+    
+    combinations = []
+# Generate all possible pairs of positions
+    for i in range(length):
+        for j in range(i + 1, length):
+            combinations.append([i, j])
+    #print(combinations)
+
+    terms = []
+    
+# Iterate through each combination
+    for combo in combinations:
+        tensors = [I for _ in range(length)]
+# Construct the tensor product for this combination
+        for i in combo:
+            tensors[i] = z
+        term = Q.tensor(tensors)
+        terms.append(term)
+        
+#determine scale factor
+        if jdef == 0:
+            H += term
+        elif jdef == 1:
+            distance = np.abs(combo[1]-combo[0])
+            H += (1/(distance**alpha)) * term
+    #print(terms)
+
+# Transverse field term
+        for i in range(length):
+# Pauli x matrix at each spin in the chain while the rest are identity
+            hterm = Q.tensor([I] * i + [x] + [I] * (length - i - 1))
+            #print("The transverse field term is:")
+            #print(hterm)
+            H += h * hterm
+#     print("The Hamiltonian is:")
+
+    H = -H # to add the negative typically associated with overall constant J
+    return H
+
 
 def svd(a):
     print("the original matrix is")
@@ -678,27 +730,6 @@ def sg_field(length):
     return Hfield
 
 
-
-def sort_seeds(length, num_ones, seedlist):
-    seeddegeneracy = []
-    degeneracylist = []
-    seeddict = {}
-    for i in seedlist:
-        jij = generate_jij(length, num_ones, i)
-        H, Hintdiag = spin_glass_hamiltonian(length, jij, 0)
-        minenergy, degeneracy, groundpos, states = find_degeneracy(length, Hintdiag)
-        seeddict.update({i:[minenergy, degeneracy, states]})
-    sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k][1], reverse=True)}
-#         degeneracylist.append(degeneracy)
-#         seeddegeneracy.append([i,degeneracy])
-#         sortedseeds = sorted(seeddegeneracy, key=lambda x: x[1], reverse=True)
-#     maxdegen = max(degeneracylist)
-#     seeds = [seed for seed, degeneracy in enumerate(degeneracylist) if degeneracy == maxdegen]
-#     return maxdegen, sortedseeds, seeds
-    return sorted_seeds
-
-
-
 def max_variance_ratio(distancedict, hlist):
     ratiodict = {}
     stdevdict = {}
@@ -885,15 +916,6 @@ def staggered_magnetization(length, states):#, psi):
     stagmag = (1/length) * zterm
     #expectvalue = Q.expect((stagmag**2), psi)
     return stagmag#, expectvalue
-
-
-
-
-
-def save_dict_to_file(dictionary, filename):
-    with open(filename, 'w') as file:
-        for key, value in dictionary.items():
-            file.write(f"{key}: {value}\n")
             
             
 def save_dict_to_array_file(dictionary, filename):
@@ -915,16 +937,16 @@ def generate_sorted_classical_data(length, num_ones, seedlist):
     sorted_seeds = {k: seeddict[k] for k in sorted(seeddict, key=lambda k: seeddict[k], reverse=True)}
     return sorted_seeds
 
-
-def read_from_disk(filename):
-    #works for the save dict to array function and will split into an array containing two parts which were separated by the first space in the text file
-    info = []
-    with open(filename, 'r') as file:
-        for line in file:
-            parts = line.split(' ', 1)
-            info.append(parts[0])
-            info.append(ast.literal_eval(parts[1].strip()))
-        return info
+# 
+# def read_from_disk(filename):
+#     #works for the save dict to array function and will split into an array containing two parts which were separated by the first space in the text file
+#     info = []
+#     with open(filename, 'r') as file:
+#         for line in file:
+#             parts = line.split(' ', 1)
+#             info.append(parts[0])
+#             info.append(ast.literal_eval(parts[1].strip()))
+#         return info
     
 
 def read_array_data(filename):
@@ -988,17 +1010,6 @@ def read_classical_data(filename):
 
     # Print the numpy array
     return array
-    
-    
-def generate_psi_data(length, num_ones, seedlist, Hfield, hval):
-    seeddict = {}
-    for seed in seedlist:
-        jij = generate_jij(length, num_ones, seed)
-        Hint, Hintdiag = sg_interaction(length, jij)
-        H = Hint + (hval * Hfield)
-        E, psi = H.groundstate()
-        seeddict.update({seed:psi})
-    return seeddict
 
 
 
@@ -1157,12 +1168,13 @@ def affmat_analysis(affmat):
     #find maximum gap/sort gaps
     sorted_gaps = sorted(gaps, reverse=True)
     max_gap = max(gaps)
-    second_gap = sorted_gaps[1]
-    third_gap = sorted_gaps[2]
+    max_gap_norm = max_gap / max(eigenvals)
+    second_gap = sorted_gaps[1] / max(eigenvals)
+    third_gap = sorted_gaps[2] / max(eigenvals)
     #convert to number of clusters
     #Will always be plus 1 to account for eigenvalue in index 0, as eigenvalues are always sorted max to min
     num_clusters = gaps.index(max_gap) + 1
-    return num_clusters, max_gap, second_gap, third_gap
+    return num_clusters, max_gap, max_gap_norm, second_gap, third_gap
 
 
 def graph_conductance(affmat, clusters):
@@ -1234,13 +1246,13 @@ def generate_mutual_info_by_line(length, num_ones, seedlist, Hfield, hval, filen
             file.write(f"{seed} {minfo}\n")
             
             
-def read_from_seed_file(filename):
-    seedlist = []
-    with open(filename, 'r') as file:
-        for line in file:
-            seed = line.strip()
-            seedlist.append(int(seed))
-        return seedlist
+# def read_from_seed_file(filename):
+#     seedlist = []
+#     with open(filename, 'r') as file:
+#         for line in file:
+#             seed = line.strip()
+#             seedlist.append(int(seed))
+#         return seedlist
     
     
 def max_eigenvector_overlap(affmat, clusters):
